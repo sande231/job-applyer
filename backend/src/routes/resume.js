@@ -1,11 +1,11 @@
 import express from 'express';
 import multer from 'multer';
-import Anthropic from '@anthropic-ai/sdk';
+import Groq from 'groq-sdk';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
-const client = new Anthropic();
+const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 router.post('/', upload.single('resume'), async (req, res) => {
   try {
@@ -28,8 +28,8 @@ router.post('/', upload.single('resume'), async (req, res) => {
       return res.status(400).json({ error: 'Could not extract text from file' });
     }
 
-    const response = await client.messages.create({
-      model: 'claude-opus-4-7',
+    const response = await client.chat.completions.create({
+      model: 'llama-3.1-8b-instant',
       max_tokens: 2048,
       messages: [
         {
@@ -53,17 +53,17 @@ ${text}`,
       ],
     });
 
-    const content = response.content[0];
-    if (content.type !== 'text') {
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
       return res.status(500).json({ error: 'Unexpected response from AI' });
     }
 
-    const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       return res.status(500).json({ error: 'Could not parse AI response' });
     }
 
-    const parsed = JSON.parse(jsonMatch[0]);
+    const parsed = JSON.parse(jsonMatch[0] ?? content);
     res.json({ success: true, data: parsed });
   } catch (err) {
     console.error('Resume parse error:', err);
