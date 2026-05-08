@@ -1,0 +1,20 @@
+{
+  "appId": "com.jobassist.app",
+  "appName": "JobAssist AI",
+  "webDir": "dist",
+  "server": {
+    "url": "https://job-applyer.onrender.com",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "backgroundColor": "#f8fafc"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1000,
+      "backgroundColor": "#0284c7",
+      "showSpinner": false
+    }
+  }
+}

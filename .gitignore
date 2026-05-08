@@ -2,3 +2,4 @@ node_modules/
 backend/data/
 backend/.env
 .env
+frontend/ios/
