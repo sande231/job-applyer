@@ -2,19 +2,26 @@ import express from 'express';
 import multer from 'multer';
 import Groq from 'groq-sdk';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
+import { resumeDb } from '../db/sqlite.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
+router.get('/', (req, res) => {
+  try {
+    const data = resumeDb.get();
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to retrieve resume' });
+  }
+});
+
 router.post('/', upload.single('resume'), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
     let text = '';
-
     if (req.file.mimetype === 'application/pdf') {
       const parsed = await pdfParse(req.file.buffer);
       text = parsed.text;
@@ -24,9 +31,7 @@ router.post('/', upload.single('resume'), async (req, res) => {
       return res.status(400).json({ error: 'Only PDF and TXT files are supported' });
     }
 
-    if (!text.trim()) {
-      return res.status(400).json({ error: 'Could not extract text from file' });
-    }
+    if (!text.trim()) return res.status(400).json({ error: 'Could not extract text from file' });
 
     const response = await client.chat.completions.create({
       model: 'llama-3.1-8b-instant',
@@ -54,16 +59,13 @@ ${text}`,
     });
 
     const content = response.choices[0]?.message?.content;
-    if (!content) {
-      return res.status(500).json({ error: 'Unexpected response from AI' });
-    }
+    if (!content) return res.status(500).json({ error: 'Unexpected response from AI' });
 
     const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return res.status(500).json({ error: 'Could not parse AI response' });
-    }
+    if (!jsonMatch) return res.status(500).json({ error: 'Could not parse AI response' });
 
     const parsed = JSON.parse(jsonMatch[0] ?? content);
+    resumeDb.save(parsed);
     res.json({ success: true, data: parsed });
   } catch (err) {
     console.error('Resume parse error:', err);

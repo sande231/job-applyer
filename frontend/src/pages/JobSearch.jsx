@@ -1,10 +1,32 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useResume } from '../context/ResumeContext.jsx';
-import { Search, MapPin, Briefcase, Building2, ExternalLink, PlusCircle, Loader2, Filter } from 'lucide-react';
+import {
+  Search, MapPin, Briefcase, Building2, ExternalLink,
+  Loader2, Filter, Bookmark, BookmarkCheck,
+} from 'lucide-react';
 
-const PORTALS = ['All', 'LinkedIn', 'Indeed', 'Glassdoor'];
+const PORTALS = ['All', 'LinkedIn', 'Indeed', 'Glassdoor', 'Remote'];
 const TYPES = ['All', 'Full-time', 'Part-time', 'Contract'];
+
+const PORTAL_COLORS = {
+  LinkedIn: 'bg-blue-100 text-blue-700',
+  Indeed: 'bg-purple-100 text-purple-700',
+  Glassdoor: 'bg-green-100 text-green-700',
+};
+
+function MatchBadge({ pct }) {
+  if (!pct) return null;
+  const color =
+    pct >= 70 ? 'bg-green-100 text-green-700'
+    : pct >= 40 ? 'bg-yellow-100 text-yellow-700'
+    : 'bg-gray-100 text-gray-500';
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${color}`}>
+      {pct}% match
+    </span>
+  );
+}
 
 export default function JobSearch() {
   const [searchParams] = useSearchParams();
@@ -17,29 +39,33 @@ export default function JobSearch() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState({});
+  const [savingId, setSavingId] = useState(null);
 
-  const search = useCallback(async (overrideRole, overrideLocation, overrideSkills) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams();
-      if (overrideRole ?? role) params.set('role', overrideRole ?? role);
-      if (overrideLocation ?? location) params.set('location', overrideLocation ?? location);
-      if (portal !== 'All') params.set('portal', portal);
-      if (type !== 'All') params.set('type', type);
-      const skills = overrideSkills ?? (resumeData?.skills || []);
-      if (skills.length) params.set('skills', skills.join(','));
+  const search = useCallback(
+    async (overrideRole, overrideLocation, overrideSkills) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams();
+        if (overrideRole ?? role) params.set('role', overrideRole ?? role);
+        if (overrideLocation ?? location) params.set('location', overrideLocation ?? location);
+        if (portal !== 'All') params.set('portal', portal);
+        if (type !== 'All') params.set('type', type);
+        const skills = overrideSkills ?? (resumeData?.skills || []);
+        if (skills.length) params.set('skills', skills.join(','));
 
-      const res = await fetch(`/api/jobs?${params}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Search failed');
-      setJobs(data.jobs);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [role, location, portal, type, resumeData]);
+        const res = await fetch(`/api/jobs?${params}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Search failed');
+        setJobs(data.jobs);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [role, location, portal, type, resumeData]
+  );
 
   useEffect(() => {
     if (resumeData) {
@@ -51,43 +77,35 @@ export default function JobSearch() {
         search(resumeRole, resumeLocation, resumeData.skills || []);
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-
-  const quickApply = async (job) => {
+  const saveJob = async (job) => {
     if (saved[job.id]) return;
+    setSavingId(job.id);
     try {
-      const res = await fetch('/api/applications', {
+      const res = await fetch('/api/jobs/saved', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: job.title,
-          company: job.company,
-          portal: job.portal,
-          status: 'Applied',
-          date: new Date().toISOString().split('T')[0],
-          location: job.location,
-          job_type: job.type,
-        }),
+        body: JSON.stringify(job),
       });
-      if (!res.ok) throw new Error('Failed to save');
+      if (!res.ok) throw new Error('Save failed');
       setSaved((prev) => ({ ...prev, [job.id]: true }));
-    } catch {}
-  };
-
-  const portalColor = (p) => {
-    if (p === 'LinkedIn') return 'bg-blue-100 text-blue-700';
-    if (p === 'Indeed') return 'bg-purple-100 text-purple-700';
-    if (p === 'Glassdoor') return 'bg-green-100 text-green-700';
-    return 'bg-gray-100 text-gray-700';
+    } catch {
+      // silently ignore
+    } finally {
+      setSavingId(null);
+    }
   };
 
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Job Search</h1>
-        <p className="text-gray-500 mt-1">Search for jobs across multiple portals.</p>
+        <p className="text-gray-500 mt-1">
+          Search across LinkedIn, Indeed, Glassdoor and remote boards.
+          {resumeData && ' Resume loaded — results ranked by skill match.'}
+        </p>
       </div>
 
       <div className="card mb-6">
@@ -101,7 +119,7 @@ export default function JobSearch() {
                 placeholder="e.g. Software Engineer"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && search(undefined, undefined)}
+                onKeyDown={(e) => e.key === 'Enter' && search()}
               />
             </div>
           </div>
@@ -111,10 +129,10 @@ export default function JobSearch() {
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 className="input pl-9"
-                placeholder="e.g. San Francisco"
+                placeholder="e.g. San Francisco or Remote"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && search(undefined, undefined)}
+                onKeyDown={(e) => e.key === 'Enter' && search()}
               />
             </div>
           </div>
@@ -123,7 +141,7 @@ export default function JobSearch() {
         <div className="flex flex-wrap gap-4 mb-4">
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Portal</label>
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
               {PORTALS.map((p) => (
                 <button
                   key={p}
@@ -139,7 +157,7 @@ export default function JobSearch() {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Type</label>
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
               {TYPES.map((t) => (
                 <button
                   key={t}
@@ -157,7 +175,7 @@ export default function JobSearch() {
 
         <button onClick={() => search()} disabled={loading} className="btn-primary flex items-center gap-2">
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Filter className="w-4 h-4" />}
-          {loading ? 'Searching...' : 'Search Jobs'}
+          {loading ? 'Searching…' : 'Search Jobs'}
         </button>
 
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
@@ -165,17 +183,23 @@ export default function JobSearch() {
 
       {jobs.length > 0 && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-500">{jobs.length} job{jobs.length !== 1 ? 's' : ''} found</p>
+          <p className="text-sm text-gray-500">
+            {jobs.length} job{jobs.length !== 1 ? 's' : ''} found
+            {resumeData && ' · sorted by skill match'}
+          </p>
           {jobs.map((job) => (
             <div key={job.id} className="card hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <h3 className="font-semibold text-gray-900">{job.title}</h3>
-                    <span className={`badge ${portalColor(job.portal)}`}>{job.portal}</span>
+                    <span className={`badge ${PORTAL_COLORS[job.portal] || 'bg-gray-100 text-gray-700'}`}>
+                      {job.portal}
+                    </span>
                     <span className="badge bg-gray-100 text-gray-600">{job.type}</span>
+                    {job.matchPercent > 0 && <MatchBadge pct={job.matchPercent} />}
                   </div>
-                  <div className="flex items-center gap-3 text-sm text-gray-500 mb-2">
+                  <div className="flex items-center gap-3 text-sm text-gray-500 mb-2 flex-wrap">
                     <span className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5" />{job.company}</span>
                     <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{job.location}</span>
                     {job.salary && <span className="font-medium text-green-700">{job.salary}</span>}
@@ -187,27 +211,33 @@ export default function JobSearch() {
                     ))}
                   </div>
                 </div>
+
                 <div className="flex flex-col gap-2 shrink-0">
                   <a
                     href={job.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="btn-secondary flex items-center gap-1 text-xs py-1.5"
+                    className="btn-primary flex items-center gap-1 text-xs py-1.5"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
-                    View
+                    Apply Now
                   </a>
                   <button
-                    onClick={() => quickApply(job)}
-                    disabled={saved[job.id]}
-                    className={`flex items-center gap-1 text-xs py-1.5 px-3 rounded-lg font-medium transition-colors ${
+                    onClick={() => saveJob(job)}
+                    disabled={!!saved[job.id] || savingId === job.id}
+                    className={`flex items-center gap-1 text-xs py-1.5 px-3 rounded-lg font-medium transition-colors border ${
                       saved[job.id]
-                        ? 'bg-green-100 text-green-700 cursor-default'
-                        : 'bg-sky-600 hover:bg-sky-700 text-white'
+                        ? 'bg-green-50 text-green-700 border-green-200 cursor-default'
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                     }`}
                   >
-                    <PlusCircle className="w-3.5 h-3.5" />
-                    {saved[job.id] ? 'Saved' : 'Track'}
+                    {saved[job.id] ? (
+                      <><BookmarkCheck className="w-3.5 h-3.5" />Saved</>
+                    ) : savingId === job.id ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin" />Saving…</>
+                    ) : (
+                      <><Bookmark className="w-3.5 h-3.5" />Save Job</>
+                    )}
                   </button>
                 </div>
               </div>
@@ -219,9 +249,9 @@ export default function JobSearch() {
 
       {!loading && jobs.length === 0 && (
         <div className="text-center py-16 text-gray-400">
-          <Search className="w-12 h-12 mx-auto mb-3 opacity-40" />
+          <Briefcase className="w-12 h-12 mx-auto mb-3 opacity-40" />
           <p className="font-medium">Search for jobs to get started</p>
-          <p className="text-sm mt-1">Use the filters above to find relevant positions</p>
+          <p className="text-sm mt-1">Upload your resume first for skill-matched results</p>
         </div>
       )}
     </div>

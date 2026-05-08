@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 
 const ResumeContext = createContext(null);
 
@@ -11,6 +11,19 @@ export function ResumeProvider({ children }) {
       return null;
     }
   });
+
+  // Hydrate from SQLite on mount (overrides localStorage with server truth)
+  useEffect(() => {
+    fetch('/api/parse-resume')
+      .then((r) => r.json())
+      .then(({ data }) => {
+        if (data) {
+          setResumeDataState(data);
+          localStorage.setItem('resumeData', JSON.stringify(data));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const setResumeData = useCallback((data) => {
     setResumeDataState(data);
