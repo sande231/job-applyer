@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useResume } from '../context/ResumeContext.jsx';
 import { Search, MapPin, Briefcase, Building2, ExternalLink, PlusCircle, Loader2, Filter } from 'lucide-react';
 
 const PORTALS = ['All', 'LinkedIn', 'Indeed', 'Glassdoor'];
 const TYPES = ['All', 'Full-time', 'Part-time', 'Contract'];
 
 export default function JobSearch() {
+  const [searchParams] = useSearchParams();
+  const { resumeData } = useResume();
   const [role, setRole] = useState('');
   const [location, setLocation] = useState('');
   const [portal, setPortal] = useState('All');
@@ -14,26 +18,17 @@ export default function JobSearch() {
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState({});
 
-  useEffect(() => {
-    const resume = localStorage.getItem('resumeData');
-    if (resume) {
-      try {
-        const data = JSON.parse(resume);
-        if (data.suggestedRoles?.length) setRole(data.suggestedRoles[0]);
-        if (data.location) setLocation(data.location.split(',')[0].trim());
-      } catch {}
-    }
-  }, []);
-
-  const search = async () => {
+  const search = useCallback(async (overrideRole, overrideLocation, overrideSkills) => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (role) params.set('role', role);
-      if (location) params.set('location', location);
+      if (overrideRole ?? role) params.set('role', overrideRole ?? role);
+      if (overrideLocation ?? location) params.set('location', overrideLocation ?? location);
       if (portal !== 'All') params.set('portal', portal);
       if (type !== 'All') params.set('type', type);
+      const skills = overrideSkills ?? (resumeData?.skills || []);
+      if (skills.length) params.set('skills', skills.join(','));
 
       const res = await fetch(`/api/jobs?${params}`);
       const data = await res.json();
@@ -44,7 +39,21 @@ export default function JobSearch() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [role, location, portal, type, resumeData]);
+
+  useEffect(() => {
+    if (resumeData) {
+      const resumeRole = resumeData.suggestedRoles?.length ? resumeData.suggestedRoles[0] : '';
+      const resumeLocation = resumeData.location ? resumeData.location.split(',')[0].trim() : '';
+      if (resumeRole) setRole(resumeRole);
+      if (resumeLocation) setLocation(resumeLocation);
+      if (searchParams.get('autoSearch') === 'true') {
+        search(resumeRole, resumeLocation, resumeData.skills || []);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   const quickApply = async (job) => {
     if (saved[job.id]) return;
@@ -92,7 +101,7 @@ export default function JobSearch() {
                 placeholder="e.g. Software Engineer"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && search()}
+                onKeyDown={(e) => e.key === 'Enter' && search(undefined, undefined)}
               />
             </div>
           </div>
@@ -105,7 +114,7 @@ export default function JobSearch() {
                 placeholder="e.g. San Francisco"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && search()}
+                onKeyDown={(e) => e.key === 'Enter' && search(undefined, undefined)}
               />
             </div>
           </div>
@@ -146,7 +155,7 @@ export default function JobSearch() {
           </div>
         </div>
 
-        <button onClick={search} disabled={loading} className="btn-primary flex items-center gap-2">
+        <button onClick={() => search()} disabled={loading} className="btn-primary flex items-center gap-2">
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Filter className="w-4 h-4" />}
           {loading ? 'Searching...' : 'Search Jobs'}
         </button>

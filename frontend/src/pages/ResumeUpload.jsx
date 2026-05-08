@@ -1,7 +1,11 @@
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Upload, FileText, CheckCircle, AlertCircle, Loader2, X } from 'lucide-react';
+import { useResume } from '../context/ResumeContext.jsx';
 
 export default function ResumeUpload() {
+  const navigate = useNavigate();
+  const { setResumeData } = useResume();
   const [dragging, setDragging] = useState(false);
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -45,9 +49,8 @@ export default function ResumeUpload() {
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.error || 'Upload failed');
-      setResult(data.data);
-
-      localStorage.setItem('resumeData', JSON.stringify(data.data));
+      setResumeData(data.data);
+      navigate('/jobs?autoSearch=true');
     } catch (err) {
       setError(err.message);
     } finally {

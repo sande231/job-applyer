@@ -136,18 +136,24 @@ const MOCK_JOBS = [
 ];
 
 router.get('/', (req, res) => {
-  const { role = '', location = '', portal = '', type = '' } = req.query;
+  const { role = '', location = '', portal = '', type = '', skills = '' } = req.query;
 
   let filtered = MOCK_JOBS;
 
-  if (role) {
+  const resumeSkills = skills ? skills.split(',').map((s) => s.toLowerCase().trim()).filter(Boolean) : [];
+
+  if (role || resumeSkills.length) {
     const roleLower = role.toLowerCase();
-    filtered = filtered.filter(
-      (j) =>
+    filtered = filtered.filter((j) => {
+      const matchesRole = role && (
         j.title.toLowerCase().includes(roleLower) ||
         j.skills.some((s) => s.toLowerCase().includes(roleLower)) ||
         j.description.toLowerCase().includes(roleLower)
-    );
+      );
+      const matchesSkills = resumeSkills.length > 0 &&
+        j.skills.some((s) => resumeSkills.includes(s.toLowerCase()));
+      return matchesRole || matchesSkills;
+    });
   }
 
   if (location) {

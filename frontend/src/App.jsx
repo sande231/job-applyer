@@ -4,9 +4,11 @@ import ResumeUpload from './pages/ResumeUpload.jsx';
 import JobSearch from './pages/JobSearch.jsx';
 import AutoFill from './pages/AutoFill.jsx';
 import ApplicationTracker from './pages/ApplicationTracker.jsx';
+import { ResumeProvider } from './context/ResumeContext.jsx';
 
 export default function App() {
   return (
+    <ResumeProvider>
     <BrowserRouter>
       <div className="min-h-screen flex flex-col">
         <Navbar />
@@ -21,5 +23,6 @@ export default function App() {
         </main>
       </div>
     </BrowserRouter>
+    </ResumeProvider>
   );
 }
